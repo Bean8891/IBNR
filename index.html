@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AUG'26 PLAN | Live Operations & Delivery Dashboard</title>
+  <meta name="description" content="Live Dealership Operations Dashboard for AUG'26 Plan: IBNR, E-Payment, RTO Completed, Ins/Form20, and Delivered stages with Location Summary & PV-EV split.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Chart.js & DataLabels Plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="theme-dark">
+  <!-- Main Application -->
+  <div class="app-layout">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-logo">
+          <div class="logo-icon"><i class="fa-solid fa-car-side"></i></div>
+          <div class="brand-info">
+            <h2>AUG'26 PLAN</h2>
+            <span class="badge-tag live-badge-tag"><i class="fa-solid fa-signal"></i> LIVE PORTAL</span>
+          </div>
+        </div>
+        <button class="icon-btn sidebar-toggle-btn" id="sidebarCloseBtn" aria-label="Close sidebar">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">MAIN VIEWS</div>
+        <button class="nav-item active" data-tab="overview">
+          <i class="fa-solid fa-chart-pie"></i>
+          <span>Operations Overview</span>
+        </button>
+        <button class="nav-item" data-tab="location-summary">
+          <i class="fa-solid fa-location-dot"></i>
+          <span>Location Summary</span>
+          <span class="nav-badge" id="locCountBadge">0</span>
+        </button>
+        <button class="nav-item" data-tab="pvev-split">
+          <i class="fa-solid fa-bolt"></i>
+          <span>PV vs EV Split</span>
+          <span class="nav-badge highlight" id="evShareBadge">0%</span>
+        </button>
+
+        <div class="nav-section-title">OPERATIONAL STAGES</div>
+        <button class="nav-item stage-nav" data-tab="stage-ibnr" data-stage="IBNR">
+          <span class="stage-dot ibnr"></span>
+          <span>IBNR (Invoiced/Stock)</span>
+          <span class="nav-badge" id="badgeIBNR">0</span>
+        </button>
+        <button class="nav-item stage-nav" data-tab="stage-epayment" data-stage="E-PAYMENT">
+          <span class="stage-dot epayment"></span>
+          <span>E-PAYMENT</span>
+          <span class="nav-badge" id="badgeEPAYMENT">0</span>
+        </button>
+        <button class="nav-item stage-nav" data-tab="stage-rto" data-stage="RTO">
+          <span class="stage-dot rto"></span>
+          <span>RTO Completed</span>
+          <span class="nav-badge" id="badgeRTO">0</span>
+        </button>
+        <button class="nav-item stage-nav" data-tab="stage-insform20" data-stage="INS /FORM20">
+          <span class="stage-dot ins"></span>
+          <span>INS / FORM 20</span>
+          <span class="nav-badge" id="badgeINS">0</span>
+        </button>
+        <button class="nav-item stage-nav" data-tab="stage-delivered" data-stage="DELIVERED">
+          <span class="stage-dot delivered"></span>
+          <span>DELIVERED</span>
+          <span class="nav-badge success" id="badgeDELIVERED">0</span>
+        </button>
+
+        <div class="nav-section-title">LIVE SYNC & HOSTING</div>
+        <button class="nav-item" data-tab="datasources">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+          <span>Live Sync & Share Online</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sheet-status-card">
+          <div class="status-indicator">
+            <span class="pulse-dot active" id="livePulseDot"></span>
+            <span id="liveStatusTitle">Live Sync Active</span>
+          </div>
+          <p class="status-sub" id="lastUpdatedText">Auto-refresh: Every 60s</p>
+          <button class="btn-xs" id="quickSyncBtn"><i class="fa-solid fa-rotate"></i> Refresh Now</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="main-wrapper">
+      <!-- Top Header -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-btn mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <div class="title-group">
+            <h1 id="pageTitle">Operations & Delivery Dashboard</h1>
+            <div class="live-sync-indicator">
+              <span class="live-status-pill"><span class="dot-online"></span> Google Sheet Live</span>
+              <span class="last-sync-time" id="topSyncTime">Synced just now</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="globalSearchInput" placeholder="Search customer, car, chassis, order...">
+            <button class="clear-search-btn hidden" id="clearSearchBtn"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+
+          <div class="action-btn-group">
+            <button class="btn btn-primary btn-sm" id="manualSyncBtn" title="Sync live updates from Google Sheets">
+              <i class="fa-solid fa-arrows-rotate"></i>
+              <span>Sync Live</span>
+            </button>
+            <button class="btn btn-secondary btn-sm" id="openHostingGuideBtn" title="How to host on GitHub & Render for GM">
+              <i class="fa-solid fa-globe"></i>
+              <span>Share Online</span>
+            </button>
+            <button class="btn btn-secondary btn-sm" id="exportDataBtn" title="Export Current View as CSV">
+              <i class="fa-solid fa-file-export"></i>
+              <span>Export</span>
+            </button>
+            <button class="theme-toggle-btn" id="themeToggleBtn" title="Toggle Dark/Light mode">
+              <i class="fa-solid fa-sun"></i>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Global Filter Strip -->
+      <div class="filter-strip">
+        <div class="filter-item">
+          <label><i class="fa-solid fa-location-dot"></i> Location:</label>
+          <select id="filterLocation" class="form-select">
+            <option value="ALL">All Locations</option>
+          </select>
+        </div>
+
+        <div class="filter-item">
+          <label><i class="fa-solid fa-charging-station"></i> Fuel Type:</label>
+          <div class="segmented-control" id="fuelSegmentControl">
+            <button class="segment-btn active" data-fuel="ALL">All</button>
+            <button class="segment-btn pv-btn" data-fuel="PV"><i class="fa-solid fa-gas-pump"></i> PV</button>
+            <button class="segment-btn ev-btn" data-fuel="EV"><i class="fa-solid fa-bolt"></i> EV</button>
+          </div>
+        </div>
+
+        <div class="filter-item">
+          <label><i class="fa-solid fa-car"></i> Model:</label>
+          <select id="filterModel" class="form-select">
+            <option value="ALL">All Models</option>
+          </select>
+        </div>
+
+        <div class="filter-item">
+          <label><i class="fa-solid fa-layer-group"></i> Stage:</label>
+          <select id="filterStage" class="form-select">
+            <option value="ALL">All Stages</option>
+            <option value="IBNR">IBNR</option>
+            <option value="E-PAYMENT">E-PAYMENT</option>
+            <option value="RTO">RTO Completed</option>
+            <option value="INS /FORM20">INS / FORM20</option>
+            <option value="DELIVERED">DELIVERED</option>
+          </select>
+        </div>
+
+        <button class="btn btn-ghost btn-sm" id="resetFiltersBtn">
+          <i class="fa-solid fa-arrows-rotate"></i> Reset
+        </button>
+
+        <div class="filter-summary" id="filterSummaryText">Showing all records</div>
+      </div>
+
+      <!-- 5 Core Operational Stages KPI Row -->
+      <section class="kpi-grid-5">
+        <!-- 1. IBNR -->
+        <div class="kpi-card stage-card-ibnr" onclick="window.navigateToStage('IBNR')" style="cursor: pointer;" title="Click to view detailed IBNR register">
+          <div class="kpi-header-row">
+            <span class="stage-tag ibnr">STAGE 1</span>
+            <span class="stage-sub-badge" id="kpiIBNRPhysical">0 Phys / 0 Tr</span>
+          </div>
+          <span class="kpi-label">IBNR (Invoiced / Stock)</span>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kpiIBNR">0</span>
+            <span class="kpi-subtext">Units</span>
+          </div>
+          <div class="kpi-meta">
+            <span>PV: <b id="kpiIBNRPV">0</b></span> &bull; <span>EV: <b id="kpiIBNREV">0</b></span>
+          </div>
+        </div>
+
+        <!-- 2. E-PAYMENT -->
+        <div class="kpi-card stage-card-epayment" onclick="window.navigateToStage('E-PAYMENT')" style="cursor: pointer;" title="Click to view E-Payment register">
+          <div class="kpi-header-row">
+            <span class="stage-tag epayment">STAGE 2</span>
+            <span class="stage-sub-badge" id="kpiEPAYAmount">₹0</span>
+          </div>
+          <span class="kpi-label">E-PAYMENT</span>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kpiEPAY">0</span>
+            <span class="kpi-subtext">Receipts</span>
+          </div>
+          <div class="kpi-meta">
+            <span>PV: <b id="kpiEPAYPV">0</b></span> &bull; <span>EV: <b id="kpiEPAYEV">0</b></span>
+          </div>
+        </div>
+
+        <!-- 3. RTO COMPLETED -->
+        <div class="kpi-card stage-card-rto" onclick="window.navigateToStage('RTO')" style="cursor: pointer;" title="Click to view RTO register">
+          <div class="kpi-header-row">
+            <span class="stage-tag rto">STAGE 3</span>
+            <span class="stage-sub-badge success-pill"><i class="fa-solid fa-check"></i> Completed</span>
+          </div>
+          <span class="kpi-label">RTO COMPLETED</span>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kpiRTO">0</span>
+            <span class="kpi-subtext">Registered</span>
+          </div>
+          <div class="kpi-meta">
+            <span>PV: <b id="kpiRTOPV">0</b></span> &bull; <span>EV: <b id="kpiRTOEV">0</b></span>
+          </div>
+        </div>
+
+        <!-- 4. INS / FORM 20 -->
+        <div class="kpi-card stage-card-ins" onclick="window.navigateToStage('INS /FORM20')" style="cursor: pointer;" title="Click to view Insurance register">
+          <div class="kpi-header-row">
+            <span class="stage-tag ins">STAGE 4</span>
+            <span class="stage-sub-badge">Policies Bound</span>
+          </div>
+          <span class="kpi-label">INS / FORM 20</span>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kpiINS">0</span>
+            <span class="kpi-subtext">Vehicles</span>
+          </div>
+          <div class="kpi-meta">
+            <span>PV: <b id="kpiINSPV">0</b></span> &bull; <span>EV: <b id="kpiINSEV">0</b></span>
+          </div>
+        </div>
+
+        <!-- 5. DELIVERED -->
+        <div class="kpi-card stage-card-delivered" onclick="window.navigateToStage('DELIVERED')" style="cursor: pointer;" title="Click to view Delivered register">
+          <div class="kpi-header-row">
+            <span class="stage-tag delivered">STAGE 5</span>
+            <span class="stage-sub-badge success-pill"><i class="fa-solid fa-circle-check"></i> Delivered</span>
+          </div>
+          <span class="kpi-label">DELIVERED</span>
+          <div class="kpi-value-row">
+            <span class="kpi-value text-success" id="kpiDEL">0</span>
+            <span class="kpi-subtext">Handovers</span>
+          </div>
+          <div class="kpi-meta">
+            <span>PV: <b id="kpiDELPV">0</b></span> &bull; <span>EV: <b id="kpiDELEV">0</b></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Views Container -->
+      <main class="views-container">
+
+        <!-- ================= TAB 1: OPERATIONS OVERVIEW ================= -->
+        <section class="tab-view active" id="view-overview">
+          <div class="grid-2-col">
+            <!-- Stage Volume Distribution -->
+            <div class="card chart-card">
+              <div class="card-header">
+                <div class="card-title-group">
+                  <h3><i class="fa-solid fa-bars-progress"></i> Stage Volume Distribution</h3>
+                  <p>Volume with exact counts across all 5 operational milestones</p>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="chart-container" style="height: 290px;">
+                  <canvas id="pipelineFunnelChart"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- PV vs EV Stage Breakdown -->
+            <div class="card chart-card">
+              <div class="card-header">
+                <div class="card-title-group">
+                  <h3><i class="fa-solid fa-bolt"></i> PV vs EV Distribution by Stage</h3>
+                  <p>Comparison of Passenger Vehicles & Electric Vehicles with direct data labels</p>
+                </div>
+                <div class="legend-pills">
+                  <span class="badge-pv-dot"></span> PV
+                  <span class="badge-ev-dot"></span> EV
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="chart-container" style="height: 290px;">
+                  <canvas id="pvevStageChart"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2-col" style="margin-top: 1.25rem;">
+            <!-- Location Performance Chart -->
+            <div class="card chart-card">
+              <div class="card-header">
+                <div class="card-title-group">
+                  <h3><i class="fa-solid fa-building"></i> Location-Wise Delivery & RTO Completed</h3>
+                  <p>Delivered vs RTO Completed count per location</p>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="chart-container" style="height: 310px;">
+                  <canvas id="locationPerformanceChart"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- Top Models Chart -->
+            <div class="card chart-card">
+              <div class="card-header">
+                <div class="card-title-group">
+                  <h3><i class="fa-solid fa-car-on"></i> Model-Wise Pipeline Volume</h3>
+                  <p>Volume by carline model with direct unit labels</p>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="chart-container" style="height: 310px;">
+                  <canvas id="modelPerformanceChart"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stage Matrix Summary Table -->
+          <div class="card" style="margin-top: 1.25rem;">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3><i class="fa-solid fa-list-check"></i> Stage Breakdown Summary Matrix</h3>
+                <p>Detailed unit totals, PV/EV split, and direct navigation</p>
+              </div>
+            </div>
+            <div class="card-body no-padding">
+              <div class="table-responsive">
+                <table class="data-table" id="stageMatrixTable">
+                  <thead>
+                    <tr>
+                      <th>Stage Name</th>
+                      <th>Operational Focus</th>
+                      <th class="text-right">Total Units</th>
+                      <th class="text-right">PV Units</th>
+                      <th class="text-right">EV Units</th>
+                      <th class="text-right">EV Share %</th>
+                      <th>Quick Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="stageMatrixBody">
+                    <!-- Populated by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TAB 2: LOCATION WISE SUMMARY ================= -->
+        <section class="tab-view" id="view-location-summary">
+          <div class="view-header-bar">
+            <div class="header-left">
+              <h2>Location-Wise Operations Performance Matrix</h2>
+              <p>Branch-by-branch matrix comparing Delivered, RTO Completed, E-Payment, INS/Form20, and IBNR</p>
+            </div>
+            <div class="header-right">
+              <button class="btn btn-secondary btn-sm" id="exportLocationSummaryBtn">
+                <i class="fa-solid fa-file-excel"></i> Export Location Table
+              </button>
+            </div>
+          </div>
+
+          <div class="grid-3-col" style="margin-bottom: 1.25rem;">
+            <div class="card stat-highlight-card">
+              <div class="stat-icon"><i class="fa-solid fa-trophy"></i></div>
+              <div class="stat-detail">
+                <span class="stat-label">Top Delivered Location</span>
+                <h4 id="topVolumeLocName">--</h4>
+                <p id="topVolumeLocCount">0 Delivered</p>
+              </div>
+            </div>
+            <div class="card stat-highlight-card">
+              <div class="stat-icon ev-color"><i class="fa-solid fa-bolt"></i></div>
+              <div class="stat-detail">
+                <span class="stat-label">Highest EV Adoption</span>
+                <h4 id="topEvLocName">--</h4>
+                <p id="topEvLocPercent">0% EV Share</p>
+              </div>
+            </div>
+            <div class="card stat-highlight-card">
+              <div class="stat-icon success-color"><i class="fa-solid fa-stamp"></i></div>
+              <div class="stat-detail">
+                <span class="stat-label">RTO Completed Leader</span>
+                <h4 id="topDelLocName">--</h4>
+                <p id="topDelLocRate">0 RTO Completed</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Location Matrix Table -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3><i class="fa-solid fa-table"></i> Location Operations Matrix</h3>
+                <p>Click column header to sort &bull; Click branch name to filter</p>
+              </div>
+              <div class="table-search">
+                <input type="text" id="locationTableSearch" placeholder="Search location..." class="form-input-sm">
+              </div>
+            </div>
+            <div class="card-body no-padding">
+              <div class="table-responsive">
+                <table class="data-table" id="locationDetailedTable">
+                  <thead>
+                    <tr>
+                      <th data-sort="location">Location / Branch <i class="fa-solid fa-sort"></i></th>
+                      <th data-sort="delivered" class="text-right">Delivered <i class="fa-solid fa-sort"></i></th>
+                      <th data-sort="rto" class="text-right">RTO Completed <i class="fa-solid fa-sort"></i></th>
+                      <th data-sort="epayment" class="text-right">E-Payment <i class="fa-solid fa-sort"></i></th>
+                      <th data-sort="ins" class="text-right">INS/Form20</th>
+                      <th data-sort="ibnr" class="text-right">IBNR</th>
+                      <th data-sort="pv" class="text-right">PV Units</th>
+                      <th data-sort="ev" class="text-right">EV Units</th>
+                      <th data-sort="evShare" class="text-right">EV Share <i class="fa-solid fa-sort"></i></th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="locationDetailedBody">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                  <tfoot id="locationDetailedFooter">
+                    <!-- Dynamic Totals -->
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Location Charts Section -->
+          <div class="grid-2-col" style="margin-top: 1.25rem;">
+            <div class="card chart-card">
+              <div class="card-header">
+                <h3>Location PV vs EV Comparison (with Data Labels)</h3>
+              </div>
+              <div class="card-body">
+                <div class="chart-container" style="height: 330px;">
+                  <canvas id="locPvEvBarChart"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <div class="card chart-card">
+              <div class="card-header">
+                <h3>Location Stage Progression Stack (with Data Labels)</h3>
+              </div>
+              <div class="card-body">
+                <div class="chart-container" style="height: 330px;">
+                  <canvas id="locStageStackChart"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TAB 3: PV vs EV SPLIT ================= -->
+        <section class="tab-view" id="view-pvev-split">
+          <div class="view-header-bar">
+            <div class="header-left">
+              <h2>PV (Passenger Vehicles) vs EV (Electric Vehicles) Analysis</h2>
+              <p>In-depth propulsion mix comparison across operational stages and car models</p>
+            </div>
+          </div>
+
+          <div class="grid-4-col" style="margin-bottom: 1.25rem;">
+            <div class="card pv-kpi-block">
+              <div class="kpi-icon-small"><i class="fa-solid fa-gas-pump"></i></div>
+              <div class="kpi-stat-body">
+                <span class="label">Total PV Records</span>
+                <h3 id="pvevPVTotal">0</h3>
+                <span class="sub" id="pvevPVPercent">0% share</span>
+              </div>
+            </div>
+
+            <div class="card ev-kpi-block">
+              <div class="kpi-icon-small"><i class="fa-solid fa-bolt"></i></div>
+              <div class="kpi-stat-body">
+                <span class="label">Total EV Records</span>
+                <h3 id="pvevEVTotal">0</h3>
+                <span class="sub" id="pvevEVPercent">0% share</span>
+              </div>
+            </div>
+
+            <div class="card stat-card">
+              <div class="kpi-icon-small"><i class="fa-solid fa-truck-arrow-right"></i></div>
+              <div class="kpi-stat-body">
+                <span class="label">PV Delivered</span>
+                <h3 id="pvevPVDeliveryCount">0</h3>
+                <span class="sub">Handovers completed</span>
+              </div>
+            </div>
+
+            <div class="card stat-card">
+              <div class="kpi-icon-small"><i class="fa-solid fa-battery-charging"></i></div>
+              <div class="kpi-stat-body">
+                <span class="label">EV Delivered</span>
+                <h3 id="pvevEVDeliveryCount">0</h3>
+                <span class="sub">Handovers completed</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2-col">
+            <div class="card chart-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-chart-pie"></i> Fuel Propulsion Ratio</h3>
+              </div>
+              <div class="card-body">
+                <div class="chart-container" style="height: 290px;">
+                  <canvas id="pvevDonutChart"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <div class="card chart-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-layer-group"></i> Model-Wise PV vs EV Breakdown</h3>
+              </div>
+              <div class="card-body">
+                <div class="chart-container" style="height: 290px;">
+                  <canvas id="pvevModelSplitChart"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PV vs EV Detailed Comparison Table -->
+          <div class="card" style="margin-top: 1.25rem;">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3><i class="fa-solid fa-table-columns"></i> Model Fuel Type Matrix</h3>
+                <p>Volume distribution by vehicle carline across stages</p>
+              </div>
+            </div>
+            <div class="card-body no-padding">
+              <div class="table-responsive">
+                <table class="data-table" id="pvevModelMatrixTable">
+                  <thead>
+                    <tr>
+                      <th>Model Name</th>
+                      <th>Category</th>
+                      <th class="text-right">Delivered</th>
+                      <th class="text-right">RTO Done</th>
+                      <th class="text-right">E-Payment</th>
+                      <th class="text-right">INS/Form20</th>
+                      <th class="text-right">IBNR</th>
+                      <th class="text-right">Total Count</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pvevModelMatrixBody">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TAB 4: IBNR SPECIALIZED VIEW ================= -->
+        <section class="tab-view" id="view-ibnr-specialized">
+          <div class="view-header-bar">
+            <div class="header-left">
+              <div class="stage-title-wrap">
+                <span class="stage-badge-large ibnr">IBNR REGISTER</span>
+                <h2>Invoiced / Booked Not Registered Register</h2>
+              </div>
+              <p>Complete status tracking for Physical/Transit stock, INS/Form20, E-Payment, and RTO filings</p>
+            </div>
+            <div class="header-right">
+              <button class="btn btn-secondary btn-sm" id="exportIbnrBtn">
+                <i class="fa-solid fa-file-arrow-down"></i> Export IBNR Register
+              </button>
+            </div>
+          </div>
+
+          <!-- IBNR Specific KPI Cards -->
+          <div class="grid-4-col" style="margin-bottom: 1.25rem;">
+            <!-- Stock Status -->
+            <div class="card mini-kpi">
+              <span class="mini-label"><i class="fa-solid fa-warehouse"></i> Stock Status</span>
+              <h3 id="ibnrKpiPhysical">0 Physical</h3>
+              <p class="sub-label" id="ibnrKpiTransit">0 in Transit</p>
+            </div>
+
+            <!-- INS / FORM20 Status -->
+            <div class="card mini-kpi">
+              <span class="mini-label"><i class="fa-solid fa-shield-halved"></i> INS / Form 20</span>
+              <h3 id="ibnrKpiInsDone" class="text-success">0 Done</h3>
+              <p class="sub-label" id="ibnrKpiInsPending">0 Pending</p>
+            </div>
+
+            <!-- E-Payment Status -->
+            <div class="card mini-kpi">
+              <span class="mini-label"><i class="fa-solid fa-credit-card"></i> E-Payment Status</span>
+              <h3 id="ibnrKpiEpayDone" class="text-success">0 Done</h3>
+              <p class="sub-label" id="ibnrKpiEpayPending">0 Pending</p>
+            </div>
+
+            <!-- RTO Status -->
+            <div class="card mini-kpi">
+              <span class="mini-label"><i class="fa-solid fa-stamp"></i> RTO Status</span>
+              <h3 id="ibnrKpiRtoDone" class="text-success">0 Done</h3>
+              <p class="sub-label" id="ibnrKpiRtoPending">0 Pending</p>
+            </div>
+          </div>
+
+          <!-- IBNR Filter Chips -->
+          <div class="ibnr-quick-chips">
+            <span class="chips-label">Quick Status Filters:</span>
+            <button class="ibnr-chip active" data-ibnr-filter="ALL">All IBNR (<span id="chipAllCount">0</span>)</button>
+            <button class="ibnr-chip" data-ibnr-filter="PHYSICAL"><i class="fa-solid fa-warehouse"></i> Physical Stock (<span id="chipPhysCount">0</span>)</button>
+            <button class="ibnr-chip" data-ibnr-filter="TRANSIT"><i class="fa-solid fa-truck"></i> In Transit (<span id="chipTransCount">0</span>)</button>
+            <button class="ibnr-chip" data-ibnr-filter="FORM20_PENDING"><i class="fa-solid fa-clock"></i> Form20 Pending (<span id="chipForm20PendCount">0</span>)</button>
+            <button class="ibnr-chip" data-ibnr-filter="EPAY_PENDING"><i class="fa-solid fa-clock"></i> E-Pay Pending (<span id="chipEpayPendCount">0</span>)</button>
+            <button class="ibnr-chip" data-ibnr-filter="RTO_PENDING"><i class="fa-solid fa-clock"></i> RTO Pending (<span id="chipRtoPendCount">0</span>)</button>
+          </div>
+
+          <!-- IBNR Detailed Table -->
+          <div class="card" style="margin-top: 1rem;">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3><i class="fa-solid fa-table-list"></i> Detailed IBNR Vehicle & Customer Register</h3>
+                <span id="ibnrTableCount" class="badge-tag">0 records</span>
+              </div>
+              <div class="table-tools">
+                <input type="text" id="ibnrTableSearch" placeholder="Search customer, chassis, order, model..." class="form-input-sm">
+                <select id="ibnrLocFilter" class="form-select-sm">
+                  <option value="ALL">All Locations</option>
+                </select>
+              </div>
+            </div>
+            <div class="card-body no-padding">
+              <div class="table-responsive">
+                <table class="data-table" id="ibnrDetailedTable">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Inv Date</th>
+                      <th>Order No</th>
+                      <th>Customer Name</th>
+                      <th>Model</th>
+                      <th>Fuel</th>
+                      <th>Chassis No</th>
+                      <th>Stock Status</th>
+                      <th>INS/Form20 Status</th>
+                      <th>E-Payment Status</th>
+                      <th>RTO Status</th>
+                      <th>CA Name</th>
+                      <th>Location</th>
+                      <th>SM Remarks</th>
+                      <th>RTO Plan</th>
+                      <th>Detail</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ibnrDetailedBody">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="card-footer pagination-bar">
+              <div class="pagination-info" id="ibnrPaginationInfo">Showing 1-20</div>
+              <div class="pagination-controls" id="ibnrPaginationControls"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TAB 5: GENERAL STAGE DRILLDOWN (E-PAYMENT, RTO, INS/FORM20, DELIVERED) ================= -->
+        <section class="tab-view" id="view-stage-drilldown">
+          <div class="view-header-bar">
+            <div class="header-left">
+              <div class="stage-title-wrap">
+                <span class="stage-badge-large" id="currentStageBadge">STAGE</span>
+                <h2 id="currentStageHeading">Stage Details</h2>
+              </div>
+              <p id="currentStageDescription">Detailed customer records and vehicle tracking for this operational milestone</p>
+            </div>
+            <div class="header-right">
+              <button class="btn btn-secondary btn-sm" id="exportStageTableBtn">
+                <i class="fa-solid fa-file-arrow-down"></i> Export Stage Data
+              </button>
+            </div>
+          </div>
+
+          <!-- Stage Quick Stats Bar -->
+          <div class="grid-4-col" style="margin-bottom: 1.25rem;">
+            <div class="card mini-kpi">
+              <span class="mini-label">Total in Stage</span>
+              <h3 id="stageTotalCount">0</h3>
+            </div>
+            <div class="card mini-kpi">
+              <span class="mini-label">PV Vehicles</span>
+              <h3 id="stagePVCount">0</h3>
+            </div>
+            <div class="card mini-kpi">
+              <span class="mini-label">EV Vehicles</span>
+              <h3 id="stageEVCount">0</h3>
+            </div>
+            <div class="card mini-kpi">
+              <span class="mini-label">Active Locations</span>
+              <h3 id="stageLocCount">0</h3>
+            </div>
+          </div>
+
+          <!-- Stage Records Table -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <h3><i class="fa-solid fa-list"></i> Customer & Vehicle Register</h3>
+                <span id="stageTableRecordCount" class="badge-tag">0 records</span>
+              </div>
+              <div class="table-tools">
+                <input type="text" id="stageTableSearch" placeholder="Search customer, chassis, model, location..." class="form-input-sm">
+                <select id="stageLocFilter" class="form-select-sm">
+                  <option value="ALL">All Locations</option>
+                </select>
+                <select id="stageFuelFilter" class="form-select-sm">
+                  <option value="ALL">All Fuel Types</option>
+                  <option value="PV">PV Only</option>
+                  <option value="EV">EV Only</option>
+                </select>
+              </div>
+            </div>
+            <div class="card-body no-padding">
+              <div class="table-responsive">
+                <table class="data-table" id="stageRecordsTable">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Date</th>
+                      <th>Customer Name</th>
+                      <th>Chassis No</th>
+                      <th>Model</th>
+                      <th>Fuel</th>
+                      <th>Location / Branch</th>
+                      <th>Sales Advisor</th>
+                      <th>Amount / Info</th>
+                      <th>Stage Status</th>
+                      <th>Details</th>
+                    </tr>
+                  </thead>
+                  <tbody id="stageRecordsBody">
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="card-footer pagination-bar">
+              <div class="pagination-info" id="paginationInfo">Showing 1-20</div>
+              <div class="pagination-controls" id="paginationControls"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TAB 6: DATA SOURCES, LIVE SYNC & ONLINE HOSTING ================= -->
+        <section class="tab-view" id="view-datasources">
+          <div class="view-header-bar">
+            <div class="header-left">
+              <h2>Live Google Sheets Integration & Online Deployment Guide</h2>
+              <p>Keep your dashboard live for your GM & host on GitHub Pages or Render.com with automatic real-time updates</p>
+            </div>
+          </div>
+
+          <div class="grid-2-col">
+            <!-- Google Sheet Live Connection -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title-group">
+                  <h3><i class="fa-solid fa-link"></i> Live Google Sheet Connection</h3>
+                  <p>Connected to AUG'26 PLAN Google Spreadsheet</p>
+                </div>
+                <span class="badge-tag live-badge">Live Active</span>
+              </div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label>Google Sheet URL or ID:</label>
+                  <input type="text" id="gSheetUrlInput" class="form-input" 
+                         value="https://docs.google.com/spreadsheets/d/1XjhjiG6mIPXmOOykL4iq4TaSjpr2IPDgZjvPNscNmrg/edit?pli=1&gid=1280599711#gid=1280599711">
+                  <small class="form-help">Sheet ID: <code>1XjhjiG6mIPXmOOykL4iq4TaSjpr2IPDgZjvPNscNmrg</code></small>
+                </div>
+
+                <div class="sheet-tabs-list">
+                  <label>Live Polling Tabs:</label>
+                  <div class="tab-chips">
+                    <span class="chip"><i class="fa-solid fa-table"></i> IBNR</span>
+                    <span class="chip"><i class="fa-solid fa-table"></i> E-PAYMENT</span>
+                    <span class="chip"><i class="fa-solid fa-table"></i> RTO (Completed)</span>
+                    <span class="chip"><i class="fa-solid fa-table"></i> INS /FORM20</span>
+                    <span class="chip"><i class="fa-solid fa-table"></i> DELIVERED</span>
+                  </div>
+                </div>
+
+                <div class="sync-actions-row">
+                  <button class="btn btn-primary" id="fetchSheetBtn">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> Sync Now from Google Sheets
+                  </button>
+                  <button class="btn btn-secondary" id="loadSampleDataBtn">
+                    <i class="fa-solid fa-database"></i> Reload Cached Data
+                  </button>
+                </div>
+
+                <div class="alert-box alert-info" style="margin-top: 1rem;">
+                  <div class="alert-icon"><i class="fa-solid fa-circle-check"></i></div>
+                  <div class="alert-text">
+                    <strong>Auto-Sync Enabled:</strong>
+                    <p>The dashboard automatically checks and pulls live rows from your Google Sheet every 60 seconds. Any new delivery, RTO clearance, or IBNR update appears live immediately!</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- GitHub & Render Hosting Step-by-Step Guide -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title-group">
+                  <h3><i class="fa-brands fa-github"></i> Host Online for Your GM</h3>
+                  <p>Step-by-step instructions for GitHub Pages or Render.com</p>
+                </div>
+                <span class="badge-tag" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa;">Free & Instant</span>
+              </div>
+              <div class="card-body">
+                <div class="guide-step-box">
+                  <h4><i class="fa-brands fa-github" style="color: #60a5fa;"></i> Option A: GitHub Pages (Recommended - 2 Mins)</h4>
+                  <ol class="guide-list">
+                    <li>Create a new repository on <a href="https://github.com" target="_blank" style="color: #60a5fa;">GitHub.com</a> (e.g. <code>aug26-ibnr-dashboard</code>).</li>
+                    <li>Upload the 4 files from <code>D:\DAILY_REPORTS\IBNR</code> (<code>index.html</code>, <code>styles.css</code>, <code>app.js</code>, <code>data.js</code>).</li>
+                    <li>Go to repo <strong>Settings</strong> &rarr; <strong>Pages</strong> &rarr; Set Branch to <strong>main</strong> / root &rarr; Click <strong>Save</strong>.</li>
+                    <li>GitHub gives you a live public link (e.g. <code>https://yourname.github.io/aug26-ibnr-dashboard/</code>) to share with your GM. <strong>It automatically updates live from your Google Sheet on every visit!</strong></li>
+                  </ol>
+                </div>
+
+                <div class="guide-step-box" style="margin-top: 1rem;">
+                  <h4><i class="fa-solid fa-cloud" style="color: #34d399;"></i> Option B: Render.com (Static Site)</h4>
+                  <ol class="guide-list">
+                    <li>Log in to <a href="https://render.com" target="_blank" style="color: #34d399;">Render.com</a> &rarr; Click <strong>New +</strong> &rarr; <strong>Static Site</strong>.</li>
+                    <li>Connect your GitHub repository.</li>
+                    <li>Set Build Command to empty and Publish Directory to <code>.</code> &rarr; Click <strong>Create Static Site</strong>.</li>
+                    <li>Render gives you a custom URL (e.g. <code>https://aug26-dashboard.onrender.com</code>) accessible from mobile or PC!</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- Record Detail Modal -->
+      <div class="modal-overlay" id="detailModal">
+        <div class="modal-card">
+          <div class="modal-header">
+            <div class="modal-title-group">
+              <span class="badge-tag" id="modalStageBadge">STAGE</span>
+              <h3 id="modalCustomerName">Customer Details</h3>
+            </div>
+            <button class="icon-btn modal-close-btn" id="closeDetailModalBtn"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="modal-body" id="modalDetailContent">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- App Scripts -->
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
