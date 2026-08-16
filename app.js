@@ -1512,12 +1512,12 @@ document.addEventListener("DOMContentLoaded", () => {
       updateStageDrilldown();
     } else {
       const titles = {
-        "overview": "Operations Overview & Stage Summary",
+        "overview": "IBNR Overview & Stage Summary",
         "location-summary": "Location-Wise Operations & Delivery Matrix",
         "pvev-split": "PV vs EV Propulsion Breakdown",
         "datasources": "Live Sync & Online Deployment Guide"
       };
-      DOM.pageTitle.textContent = titles[tabId] || "Operations & Delivery Dashboard";
+      DOM.pageTitle.textContent = titles[tabId] || "IBNR Overview & Stage Summary";
     }
 
     setTimeout(() => {
