@@ -1,6 +1,7 @@
 // =========================================================
 // AUG'26 PLAN - Live Operations & Delivery Dashboard
-// Automatic Google Sheets Sync & Visible Visual DataLabels
+// Real-Time Google Sheets Sync, Month Filter & Visible DataLabels
+// IBNR Rule: Cumulative ALL "RTO Not Done" (No Month Filter on IBNR)
 // =========================================================
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -20,6 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
     lastSyncTimestamp: null,
     isSyncing: false,
     filters: {
+      month: "Aug'26", // Default to Present Month for operational stages
       location: "ALL",
       fuel: "ALL",
       model: "ALL",
@@ -31,7 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
       pageSize: 20,
       search: "",
       location: "ALL",
-      subFilter: "ALL"
+      subFilter: "RTO_NOT_DONE" // Default all RTO Not Done
     },
     stageTable: {
       page: 1,
@@ -60,12 +62,14 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Live Sync Indicators
     topSyncTime: document.getElementById("topSyncTime"),
+    topMonthBadge: document.getElementById("topMonthBadge"),
     lastUpdatedText: document.getElementById("lastUpdatedText"),
     manualSyncBtn: document.getElementById("manualSyncBtn"),
     quickSyncBtn: document.getElementById("quickSyncBtn"),
     openHostingGuideBtn: document.getElementById("openHostingGuideBtn"),
 
     // Filters
+    filterMonth: document.getElementById("filterMonth"),
     filterLocation: document.getElementById("filterLocation"),
     fuelSegmentControl: document.getElementById("fuelSegmentControl"),
     filterModel: document.getElementById("filterModel"),
@@ -224,10 +228,30 @@ document.addEventListener("DOMContentLoaded", () => {
     return "PV";
   }
 
+  function normalizeMonth(m, dateStr) {
+    let val = "";
+    if (m) val = String(m).toUpperCase().trim();
+    if (!val && dateStr) val = String(dateStr).toUpperCase().trim();
+    
+    if (val.includes("AUG") || val.includes("-08-") || val.includes("/08/") || val.includes(".08.")) return "Aug'26";
+    if (val.includes("JUL") || val.includes("-07-") || val.includes("/07/") || val.includes(".07.")) return "Jul'26";
+    if (val.includes("JUN") || val.includes("-06-") || val.includes("/06/") || val.includes(".06.")) return "Jun'26";
+    return "Aug'26";
+  }
+
   // Populate Filter Dropdowns
   function populateFilterDropdowns() {
     const records = window.AUG26_STORE.records;
     
+    // Unique Months
+    const months = Array.from(new Set(records.map(r => r.month || normalizeMonth(r.month, r.date)).filter(Boolean))).sort().reverse();
+    DOM.filterMonth.innerHTML = "";
+    months.forEach(m => {
+      const isPresent = m === "Aug'26";
+      DOM.filterMonth.innerHTML += `<option value="${m}" ${isPresent ? 'selected' : ''}>${m} ${isPresent ? '(Present Month)' : ''}</option>`;
+    });
+    DOM.filterMonth.innerHTML += `<option value="ALL">All Months</option>`;
+
     // Unique Locations
     const locations = Array.from(new Set(records.map(r => normalizeLoc(r.location)).filter(Boolean))).sort();
     DOM.filterLocation.innerHTML = `<option value="ALL">All Locations (${locations.length})</option>`;
@@ -250,8 +274,20 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Get Global Filtered Records
+  // USER RULE: For IBNR, NO month filter applies — it shows ALL cumulative records where RTO is Not Done!
   function getFilteredRecords() {
     return window.AUG26_STORE.records.filter(item => {
+      const isIbnr = normalizeStage(item.stage) === "IBNR";
+      const recMonth = item.month || normalizeMonth(item.month, item.date);
+
+      // Month Filter: applies to operational stages (E-Payment, RTO, INS/Form20, Delivered).
+      // For IBNR: NO month filter!
+      if (!isIbnr) {
+        if (state.filters.month !== "ALL" && recMonth !== state.filters.month) {
+          return false;
+        }
+      }
+
       // Global Search
       if (state.filters.search) {
         const q = state.filters.search.toLowerCase();
@@ -305,7 +341,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const stageCounts = {};
 
     stages.forEach(st => {
-      const recs = filtered.filter(r => normalizeStage(r.stage) === st);
+      let recs = filtered.filter(r => normalizeStage(r.stage) === st);
+      
+      // CRITICAL RULE: For IBNR, show ALL cumulative units where RTO STATUS is "RTO Not Done" / pending!
+      if (st === "IBNR") {
+        recs = recs.filter(r => {
+          const rtoSt = (r.rtoStatus || "").toUpperCase();
+          return rtoSt.includes("NOT DONE") || rtoSt.includes("PENDING") || !rtoSt.includes("DONE");
+        });
+      }
+
       const stTotal = recs.length;
       const stPV = recs.filter(r => r.fuelType === "PV").length;
       const stEV = recs.filter(r => r.fuelType === "EV").length;
@@ -319,7 +364,7 @@ document.addEventListener("DOMContentLoaded", () => {
     DOM.badgeINS.textContent = stageCounts["INS /FORM20"].total;
     DOM.badgeDELIVERED.textContent = stageCounts["DELIVERED"].total;
 
-    // 1. IBNR Details
+    // 1. IBNR Details (All RTO Not Done - Cumulative)
     const ibnrRecs = stageCounts["IBNR"].recs;
     const ibnrPhysical = ibnrRecs.filter(r => (r.stockStatus || "").toUpperCase().includes("PHYSICAL")).length;
     const ibnrTransit = ibnrRecs.filter(r => (r.stockStatus || "").toUpperCase().includes("TRANSIT")).length;
@@ -329,7 +374,7 @@ document.addEventListener("DOMContentLoaded", () => {
     DOM.kpiIBNRPV.textContent = stageCounts["IBNR"].pv;
     DOM.kpiIBNREV.textContent = stageCounts["IBNR"].ev;
 
-    // 2. E-PAYMENT Details
+    // 2. E-PAYMENT Details (Filtered by Month)
     const epayRecs = stageCounts["E-PAYMENT"].recs;
     let totalEpayAmt = 0;
     epayRecs.forEach(r => {
@@ -345,29 +390,29 @@ document.addEventListener("DOMContentLoaded", () => {
     DOM.kpiEPAYPV.textContent = stageCounts["E-PAYMENT"].pv;
     DOM.kpiEPAYEV.textContent = stageCounts["E-PAYMENT"].ev;
 
-    // 3. RTO COMPLETED Details
+    // 3. RTO COMPLETED Details (Filtered by Month)
     DOM.kpiRTO.textContent = stageCounts["RTO"].total;
     DOM.kpiRTOPV.textContent = stageCounts["RTO"].pv;
     DOM.kpiRTOEV.textContent = stageCounts["RTO"].ev;
 
-    // 4. INS / FORM 20 Details
+    // 4. INS / FORM 20 Details (Filtered by Month)
     DOM.kpiINS.textContent = stageCounts["INS /FORM20"].total;
     DOM.kpiINSPV.textContent = stageCounts["INS /FORM20"].pv;
     DOM.kpiINSEV.textContent = stageCounts["INS /FORM20"].ev;
 
-    // 5. DELIVERED Details
+    // 5. DELIVERED Details (Filtered by Month)
     DOM.kpiDEL.textContent = stageCounts["DELIVERED"].total;
     DOM.kpiDELPV.textContent = stageCounts["DELIVERED"].pv;
     DOM.kpiDELEV.textContent = stageCounts["DELIVERED"].ev;
 
     // Filter Summary text
-    let summaryParts = [`${total} record${total === 1 ? '' : 's'}`];
-    if (state.filters.location !== "ALL") summaryParts.push(`Location: ${state.filters.location}`);
+    let summaryParts = [`Operational Month: ${state.filters.month === 'ALL' ? 'All Months' : state.filters.month}`];
+    summaryParts.push(`IBNR: All Pending RTO (${stageCounts["IBNR"].total} units)`);
+    if (state.filters.location !== "ALL") summaryParts.push(`Loc: ${state.filters.location}`);
     if (state.filters.fuel !== "ALL") summaryParts.push(`Fuel: ${state.filters.fuel}`);
     if (state.filters.model !== "ALL") summaryParts.push(`Model: ${state.filters.model}`);
-    if (state.filters.stage !== "ALL") summaryParts.push(`Stage: ${state.filters.stage}`);
-    if (state.filters.search) summaryParts.push(`Search: "${state.filters.search}"`);
     DOM.filterSummaryText.textContent = summaryParts.join(" • ");
+    DOM.topMonthBadge.textContent = state.filters.month === 'ALL' ? 'All Months View' : `Month: ${state.filters.month}`;
 
     // Render Stage Matrix Table in Overview
     renderStageMatrixTable(stageCounts, total);
@@ -375,16 +420,17 @@ document.addEventListener("DOMContentLoaded", () => {
     // Update PV vs EV Tab Cards
     updatePvEvStats(filtered, pvCount, evCount, total);
 
-    // Render IBNR Specialized View
-    renderIbnrView(ibnrRecs);
+    // Render IBNR Specialized View (All IBNR in pipeline)
+    const allIbnrInStore = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === "IBNR");
+    renderIbnrView(allIbnrInStore);
   }
 
   // Render Stage Breakdown Matrix
   function renderStageMatrixTable(stageCounts, grandTotal) {
     const stageMeta = [
-      { name: "IBNR", focus: "Invoiced Stock Awaiting RTO & Delivery", colorClass: "ibnr" },
+      { name: "IBNR", focus: "All Active Stock Pending RTO (Cumulative - No Month Filter)", colorClass: "ibnr" },
       { name: "E-PAYMENT", focus: "Payment Gateway Clearance & Receipts", colorClass: "epayment" },
-      { name: "RTO", focus: "RTO Tax & Registration Completed", colorClass: "rto" },
+      { name: "RTO", focus: "RTO Tax & Permanent Registration Completed", colorClass: "rto" },
       { name: "INS /FORM20", focus: "Insurance Policy Bound & Form 20 Verification", colorClass: "ins" },
       { name: "DELIVERED", focus: "Customer Handover Completed", colorClass: "delivered" }
     ];
@@ -394,7 +440,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const evShare = data.total > 0 ? ((data.ev / data.total) * 100).toFixed(1) : "0.0";
       return `
         <tr>
-          <td><span class="stage-tag ${st.colorClass}">${st.name === 'RTO' ? 'RTO COMPLETED' : st.name}</span></td>
+          <td><span class="stage-tag ${st.colorClass}">${st.name === 'RTO' ? 'RTO COMPLETED' : (st.name === 'IBNR' ? 'IBNR (ALL RTO NOT DONE)' : st.name)}</span></td>
           <td style="color: var(--text-muted);">${st.focus}</td>
           <td class="text-right"><strong>${data.total.toLocaleString()}</strong></td>
           <td class="text-right"><span class="tag-pv"><i class="fa-solid fa-gas-pump"></i> ${data.pv}</span></td>
@@ -416,6 +462,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ================= IBNR SPECIALIZED VIEW =================
+  // Shows ALL cumulative records from IBNR sheet
   function renderIbnrView(allIbnrRecs) {
     const physCount = allIbnrRecs.filter(r => (r.stockStatus || "").toUpperCase().includes("PHYSICAL")).length;
     const transCount = allIbnrRecs.filter(r => (r.stockStatus || "").toUpperCase().includes("TRANSIT")).length;
@@ -427,7 +474,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const epayPend = allIbnrRecs.length - epayDone;
 
     const rtoDone = allIbnrRecs.filter(r => (r.rtoStatus || "").toUpperCase().includes("DONE") && !(r.rtoStatus || "").toUpperCase().includes("NOT DONE")).length;
-    const rtoPend = allIbnrRecs.length - rtoDone;
+    const rtoPend = allIbnrRecs.filter(r => (r.rtoStatus || "").toUpperCase().includes("NOT DONE") || !(r.rtoStatus || "").toUpperCase().includes("DONE")).length;
 
     // Update KPI cards
     DOM.ibnrKpiPhysical.textContent = `${physCount} Physical`;
@@ -437,7 +484,7 @@ document.addEventListener("DOMContentLoaded", () => {
     DOM.ibnrKpiEpayDone.textContent = `${epayDone} Done`;
     DOM.ibnrKpiEpayPending.textContent = `${epayPend} Pending`;
     DOM.ibnrKpiRtoDone.textContent = `${rtoDone} Done`;
-    DOM.ibnrKpiRtoPending.textContent = `${rtoPend} Pending`;
+    DOM.ibnrKpiRtoPending.textContent = `${rtoPend} Pending (All)`;
 
     // Chip counts
     DOM.chipAllCount.textContent = allIbnrRecs.length;
@@ -447,16 +494,18 @@ document.addEventListener("DOMContentLoaded", () => {
     DOM.chipEpayPendCount.textContent = epayPend;
     DOM.chipRtoPendCount.textContent = rtoPend;
 
-    // Filter Table
+    // Filter Table (No Month restriction on IBNR)
     let filtered = allIbnrRecs.filter(r => {
       if (state.ibnrTable.location !== "ALL" && normalizeLoc(r.location) !== normalizeLoc(state.ibnrTable.location)) return false;
       
+      const isRtoNotDone = (r.rtoStatus || "").toUpperCase().includes("NOT DONE") || !(r.rtoStatus || "").toUpperCase().includes("DONE");
+
       // Sub Filters
+      if (state.ibnrTable.subFilter === "RTO_NOT_DONE" && !isRtoNotDone) return false;
       if (state.ibnrTable.subFilter === "PHYSICAL" && !(r.stockStatus || "").toUpperCase().includes("PHYSICAL")) return false;
       if (state.ibnrTable.subFilter === "TRANSIT" && !(r.stockStatus || "").toUpperCase().includes("TRANSIT")) return false;
       if (state.ibnrTable.subFilter === "FORM20_PENDING" && (r.insStatus || "").toUpperCase().includes("DONE") && !(r.insStatus || "").toUpperCase().includes("NOT DONE")) return false;
       if (state.ibnrTable.subFilter === "EPAY_PENDING" && (r.epayStatus || "").toUpperCase().includes("DONE") && !(r.epayStatus || "").toUpperCase().includes("NOT DONE")) return false;
-      if (state.ibnrTable.subFilter === "RTO_PENDING" && (r.rtoStatus || "").toUpperCase().includes("DONE") && !(r.rtoStatus || "").toUpperCase().includes("NOT DONE")) return false;
 
       if (state.ibnrTable.search) {
         const q = state.ibnrTable.search.toLowerCase();
@@ -474,7 +523,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return true;
     });
 
-    DOM.ibnrTableCount.textContent = `${filtered.length} records`;
+    DOM.ibnrTableCount.textContent = `${filtered.length} records (All Months)`;
 
     // Pagination
     const totalPages = Math.ceil(filtered.length / state.ibnrTable.pageSize) || 1;
@@ -494,16 +543,16 @@ document.addEventListener("DOMContentLoaded", () => {
       return `
         <tr>
           <td style="color: var(--text-muted); font-size: 0.75rem;">${startIdx + i + 1}</td>
-          <td><span style="font-size: 0.75rem;">${r.date || '-'}</span></td>
+          <td><span style="font-size: 0.75rem;">${r.date || '-'}</span> <small style="color: var(--text-muted);">(${r.month})</small></td>
           <td><span style="font-family: var(--font-mono); font-size: 0.75rem;">${r.bookingId || '-'}</span></td>
           <td><strong>${r.customerName}</strong></td>
           <td><strong>${r.model}</strong></td>
           <td><span class="${isEv ? 'tag-ev' : 'tag-pv'}">${r.fuelType}</span></td>
           <td><span style="font-family: var(--font-mono); font-size: 0.75rem;">${r.chassisNo || '-'}</span></td>
           <td><span class="status-pill ${isPhys ? 'physical' : 'transit'}">${r.stockStatus || 'PHYSICAL'}</span></td>
-          <td><span class="status-pill ${isForm20Done ? 'done' : 'pending'}"><i class="fa-solid ${isForm20Done ? 'fa-check' : 'fa-clock'}"></i> ${isForm20Done ? 'Done' : 'Pending'}</span></td>
-          <td><span class="status-pill ${isEpayDone ? 'done' : 'pending'}"><i class="fa-solid ${isEpayDone ? 'fa-check' : 'fa-clock'}"></i> ${isEpayDone ? 'Done' : 'Pending'}</span></td>
-          <td><span class="status-pill ${isRtoDone ? 'done' : 'pending'}"><i class="fa-solid ${isRtoDone ? 'fa-check' : 'fa-clock'}"></i> ${isRtoDone ? 'Done' : 'Pending'}</span></td>
+          <td><span class="status-pill ${isForm20Done ? 'done' : 'pending'}"><i class="fa-solid ${isForm20Done ? 'fa-check' : 'fa-clock'}"></i> ${r.insStatus || (isForm20Done ? 'Done' : 'Not Done')}</span></td>
+          <td><span class="status-pill ${isEpayDone ? 'done' : 'pending'}"><i class="fa-solid ${isEpayDone ? 'fa-check' : 'fa-clock'}"></i> ${r.epayStatus || (isEpayDone ? 'Done' : 'Not Done')}</span></td>
+          <td><span class="status-pill ${isRtoDone ? 'done' : 'pending'}"><i class="fa-solid ${isRtoDone ? 'fa-check' : 'fa-clock'}"></i> ${r.rtoStatus || (isRtoDone ? 'Done' : 'RTO Not Done')}</span></td>
           <td>${r.salesAdvisor || '-'}</td>
           <td><span class="badge-tag">${r.location}</span></td>
           <td style="font-size: 0.75rem; color: var(--text-muted); max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${r.remarks || '-'}">${r.remarks || '-'}</td>
@@ -562,29 +611,29 @@ document.addEventListener("DOMContentLoaded", () => {
       chip.classList.add("active");
       state.ibnrTable.subFilter = chip.getAttribute("data-ibnr-filter");
       state.ibnrTable.page = 1;
-      const ibnrRecs = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === "IBNR");
-      renderIbnrView(ibnrRecs);
+      const allIbnrInStore = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === "IBNR");
+      renderIbnrView(allIbnrInStore);
     });
   });
 
   DOM.ibnrTableSearch.addEventListener("input", (e) => {
     state.ibnrTable.search = e.target.value.trim();
     state.ibnrTable.page = 1;
-    const ibnrRecs = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === "IBNR");
-    renderIbnrView(ibnrRecs);
+    const allIbnrInStore = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === "IBNR");
+    renderIbnrView(allIbnrInStore);
   });
 
   DOM.ibnrLocFilter.addEventListener("change", (e) => {
     state.ibnrTable.location = e.target.value;
     state.ibnrTable.page = 1;
-    const ibnrRecs = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === "IBNR");
-    renderIbnrView(ibnrRecs);
+    const allIbnrInStore = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === "IBNR");
+    renderIbnrView(allIbnrInStore);
   });
 
   window.changeIbnrPage = function(page) {
     state.ibnrTable.page = page;
-    const ibnrRecs = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === "IBNR");
-    renderIbnrView(ibnrRecs);
+    const allIbnrInStore = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === "IBNR");
+    renderIbnrView(allIbnrInStore);
   };
 
   // Update PV vs EV Tab Metrics
@@ -628,7 +677,10 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       modelMap[model].total++;
       const stage = normalizeStage(r.stage);
-      if (stage === "IBNR") modelMap[model].ibnr++;
+      if (stage === "IBNR") {
+        const rtoSt = (r.rtoStatus || "").toUpperCase();
+        if (rtoSt.includes("NOT DONE") || !rtoSt.includes("DONE")) modelMap[model].ibnr++;
+      }
       else if (stage === "E-PAYMENT") modelMap[model].epayment++;
       else if (stage === "RTO") modelMap[model].rto++;
       else if (stage === "INS /FORM20") modelMap[model].ins++;
@@ -679,7 +731,10 @@ document.addEventListener("DOMContentLoaded", () => {
       else data.pv++;
 
       const st = normalizeStage(r.stage);
-      if (st === "IBNR") data.ibnr++;
+      if (st === "IBNR") {
+        const rtoSt = (r.rtoStatus || "").toUpperCase();
+        if (rtoSt.includes("NOT DONE") || !rtoSt.includes("DONE")) data.ibnr++;
+      }
       else if (st === "E-PAYMENT") data.epayment++;
       else if (st === "RTO") data.rto++;
       else if (st === "INS /FORM20") data.ins++;
@@ -740,7 +795,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <td class="text-right"><strong>${l.rto}</strong></td>
           <td class="text-right">${l.epayment}</td>
           <td class="text-right">${l.ins}</td>
-          <td class="text-right">${l.ibnr}</td>
+          <td class="text-right"><strong>${l.ibnr}</strong></td>
           <td class="text-right"><span class="tag-pv">${l.pv}</span></td>
           <td class="text-right"><span class="tag-ev">${l.ev}</span></td>
           <td class="text-right">
@@ -780,7 +835,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <td class="text-right">${tot.rto.toLocaleString()}</td>
         <td class="text-right">${tot.epayment.toLocaleString()}</td>
         <td class="text-right">${tot.ins.toLocaleString()}</td>
-        <td class="text-right">${tot.ibnr.toLocaleString()}</td>
+        <td class="text-right font-bold">${tot.ibnr.toLocaleString()}</td>
         <td class="text-right">${tot.pv.toLocaleString()}</td>
         <td class="text-right">${tot.ev.toLocaleString()}</td>
         <td class="text-right">${totEvShare}%</td>
@@ -808,7 +863,7 @@ document.addEventListener("DOMContentLoaded", () => {
     DOM.currentStageDescription.textContent = descriptions[stage] || "Detailed tracking records for this operational stage.";
 
     // Get all records in this stage
-    const stageAllRecords = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === stage);
+    const stageAllRecords = getFilteredRecords().filter(r => normalizeStage(r.stage) === stage);
     
     // Filter by Stage local filters + global search
     let filtered = stageAllRecords.filter(r => {
@@ -882,7 +937,6 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
     }
 
-    // Pagination info & controls
     const endIdx = Math.min(startIdx + state.stageTable.pageSize, filtered.length);
     DOM.paginationInfo.textContent = filtered.length > 0 
       ? `Showing ${startIdx + 1}-${endIdx} of ${filtered.length} records`
@@ -960,8 +1014,17 @@ document.addEventListener("DOMContentLoaded", () => {
     destroyChart("pipelineFunnel");
 
     const stages = ["IBNR", "E-PAYMENT", "RTO", "INS /FORM20", "DELIVERED"];
-    const labels = ["IBNR", "E-PAYMENT", "RTO COMPLETED", "INS / FORM20", "DELIVERED"];
-    const counts = stages.map(st => filtered.filter(r => normalizeStage(r.stage) === st).length);
+    const labels = ["IBNR (ALL RTO NOT DONE)", "E-PAYMENT", "RTO COMPLETED", "INS / FORM20", "DELIVERED"];
+    const counts = stages.map(st => {
+      if (st === "IBNR") {
+        return filtered.filter(r => {
+          if (normalizeStage(r.stage) !== "IBNR") return false;
+          const rtoSt = (r.rtoStatus || "").toUpperCase();
+          return rtoSt.includes("NOT DONE") || !rtoSt.includes("DONE");
+        }).length;
+      }
+      return filtered.filter(r => normalizeStage(r.stage) === st).length;
+    });
 
     state.charts.pipelineFunnel = new Chart(ctx, {
       type: "bar",
@@ -983,7 +1046,7 @@ document.addEventListener("DOMContentLoaded", () => {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { top: 20 } },
+        layout: { padding: { top: 25 } },
         plugins: {
           legend: { display: false },
           datalabels: {
@@ -997,7 +1060,7 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         },
         scales: {
-          x: { grid: { display: false }, ticks: { color: textColor, font: { weight: 'bold', size: 11 } } },
+          x: { grid: { display: false }, ticks: { color: textColor, font: { weight: 'bold', size: 10 } } },
           y: { grid: { color: gridColor }, ticks: { color: textColor } }
         }
       }
@@ -1011,9 +1074,28 @@ document.addEventListener("DOMContentLoaded", () => {
     destroyChart("pvevStage");
 
     const stages = ["IBNR", "E-PAYMENT", "RTO", "INS /FORM20", "DELIVERED"];
-    const labels = ["IBNR", "E-PAYMENT", "RTO COMPLETED", "INS / FORM20", "DELIVERED"];
-    const pvCounts = stages.map(st => filtered.filter(r => normalizeStage(r.stage) === st && r.fuelType === "PV").length);
-    const evCounts = stages.map(st => filtered.filter(r => normalizeStage(r.stage) === st && r.fuelType === "EV").length);
+    const labels = ["IBNR (RTO Not Done)", "E-PAYMENT", "RTO COMPLETED", "INS / FORM20", "DELIVERED"];
+    const pvCounts = stages.map(st => {
+      if (st === "IBNR") {
+        return filtered.filter(r => {
+          if (normalizeStage(r.stage) !== "IBNR" || r.fuelType !== "PV") return false;
+          const rtoSt = (r.rtoStatus || "").toUpperCase();
+          return rtoSt.includes("NOT DONE") || !rtoSt.includes("DONE");
+        }).length;
+      }
+      return filtered.filter(r => normalizeStage(r.stage) === st && r.fuelType === "PV").length;
+    });
+
+    const evCounts = stages.map(st => {
+      if (st === "IBNR") {
+        return filtered.filter(r => {
+          if (normalizeStage(r.stage) !== "IBNR" || r.fuelType !== "EV") return false;
+          const rtoSt = (r.rtoStatus || "").toUpperCase();
+          return rtoSt.includes("NOT DONE") || !rtoSt.includes("DONE");
+        }).length;
+      }
+      return filtered.filter(r => normalizeStage(r.stage) === st && r.fuelType === "EV").length;
+    });
 
     state.charts.pvevStage = new Chart(ctx, {
       type: "bar",
@@ -1231,7 +1313,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const loc = normalizeLoc(r.location) || "Other";
       if (!locMap[loc]) locMap[loc] = { "IBNR": 0, "E-PAYMENT": 0, "RTO": 0, "INS /FORM20": 0, "DELIVERED": 0 };
       const st = normalizeStage(r.stage);
-      if (locMap[loc][st] !== undefined) locMap[loc][st]++;
+      if (st === "IBNR") {
+        const rtoSt = (r.rtoStatus || "").toUpperCase();
+        if (rtoSt.includes("NOT DONE") || !rtoSt.includes("DONE")) locMap[loc]["IBNR"]++;
+      } else if (locMap[loc][st] !== undefined) {
+        locMap[loc][st]++;
+      }
     });
 
     const locations = Object.keys(locMap).slice(0, 8);
@@ -1244,7 +1331,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     const datasets = stages.map(st => ({
-      label: st === "RTO" ? "RTO COMPLETED" : st,
+      label: st === "RTO" ? "RTO COMPLETED" : (st === "IBNR" ? "IBNR (RTO Not Done)" : st),
       data: locations.map(l => locMap[l][st]),
       backgroundColor: colors[st]
     }));
@@ -1408,9 +1495,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (tabId === "stage-ibnr") {
       state.currentStageDrilldown = "IBNR";
       state.ibnrTable.page = 1;
-      DOM.pageTitle.textContent = `IBNR Detailed Register & Status Tracking`;
-      const ibnrRecs = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === "IBNR");
-      renderIbnrView(ibnrRecs);
+      DOM.pageTitle.textContent = `IBNR Register (All Pending RTO Stock)`;
+      const allIbnrInStore = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === "IBNR");
+      renderIbnrView(allIbnrInStore);
     } else if (tabId.startsWith("stage-")) {
       const stageName = tabId.replace("stage-", "").toUpperCase();
       const map = {
@@ -1488,8 +1575,8 @@ document.addEventListener("DOMContentLoaded", () => {
           <span>${record.bookingId || record.id}</span>
         </div>
         <div class="detail-field">
-          <label>Date</label>
-          <span>${record.date}</span>
+          <label>Date / Month</label>
+          <span>${record.date} (${record.month || 'Aug\'26'})</span>
         </div>
         <div class="detail-field">
           <label>Location / Branch</label>
@@ -1569,6 +1656,11 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Filter Listeners
+  DOM.filterMonth.addEventListener("change", (e) => {
+    state.filters.month = e.target.value;
+    renderApp();
+  });
+
   DOM.filterLocation.addEventListener("change", (e) => {
     state.filters.location = e.target.value;
     renderApp();
@@ -1613,7 +1705,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   DOM.resetFiltersBtn.addEventListener("click", () => {
-    state.filters = { location: "ALL", fuel: "ALL", model: "ALL", stage: "ALL", search: "" };
+    state.filters = { month: "Aug'26", location: "ALL", fuel: "ALL", model: "ALL", stage: "ALL", search: "" };
+    DOM.filterMonth.value = "Aug'26";
     DOM.filterLocation.value = "ALL";
     DOM.filterModel.value = "ALL";
     DOM.filterStage.value = "ALL";
@@ -1733,7 +1826,7 @@ document.addEventListener("DOMContentLoaded", () => {
     alert("Cached dataset reloaded!");
   });
 
-  // Robust Specific Tab Parser
+  // Robust Specific Tab Parser with Month Extraction
   function parseSpecificTabCsv(csvText, tabName) {
     const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     if (lines.length <= 1) return [];
@@ -1746,9 +1839,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (tabName === "IBNR") {
         if (cols[4] && cols[4] !== "Chassis No") {
+          const invMonth = cols[1] || "";
+          const invDate = cols[2] || "";
+          const m = normalizeMonth(invMonth, invDate);
+
           records.push({
             id: `IBNR-${i}`,
-            date: cols[2] || "Aug'26",
+            date: invDate || invMonth || "Aug'26",
+            month: m,
             customerName: cols[11] || `Customer ${i}`,
             mobile: "",
             model: cols[8] || cols[9] || "Nexon",
@@ -1770,9 +1868,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } else if (tabName === "E-PAYMENT") {
         if (cols[1] && cols[1] !== "Chassis No") {
+          const mRaw = cols[11] || "";
+          const dateRaw = cols[5] || "";
+          const m = normalizeMonth(mRaw, dateRaw);
+
           records.push({
             id: `EPAY-${i}`,
-            date: cols[5] || "Aug'26",
+            date: dateRaw || "Aug'26",
+            month: m,
             customerName: cols[7] || `Customer ${i}`,
             mobile: "",
             model: cols[10] === "EV" ? "Tata EV" : "Tata PV",
@@ -1792,9 +1895,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } else if (tabName === "RTO") {
         if (cols[2] && cols[2] !== "CHASSIS NO") {
+          const mRaw = cols[12] || "";
+          const dateRaw = cols[4] || "";
+          const m = normalizeMonth(mRaw, dateRaw);
+
           records.push({
             id: `RTO-${i}`,
-            date: cols[4] || "Aug'26",
+            date: dateRaw || "Aug'26",
+            month: m,
             customerName: cols[5] || `Customer ${i}`,
             mobile: "",
             model: cols[10] || "Nexon",
@@ -1814,9 +1922,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } else if (tabName === "INS /FORM20") {
         if (cols[1] && cols[1] !== "CHASSIS NUMBER") {
+          const dateRaw = cols[0] || "";
+          const mRaw = cols[4] || "";
+          const m = normalizeMonth(mRaw, dateRaw);
+
           records.push({
             id: `INS-${i}`,
-            date: cols[0] || "Aug'26",
+            date: dateRaw || "Aug'26",
+            month: m,
             customerName: `Customer ${i}`,
             mobile: "",
             model: cols[2] || "Tata Vehicle",
@@ -1836,9 +1949,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       } else if (tabName === "DELIVERED") {
         if (cols[3] && cols[3].startsWith("MAT")) {
+          const delDate = cols[4] || "";
+          const mRaw = cols[14] || "";
+          const m = normalizeMonth(mRaw, delDate);
+
           records.push({
             id: `DEL-${i}`,
-            date: cols[4] || "Aug'26",
+            date: delDate || "Aug'26",
+            month: m,
             customerName: cols[2] || `Customer ${i}`,
             mobile: "",
             model: cols[6] || "Tata Vehicle",
@@ -1877,7 +1995,7 @@ document.addEventListener("DOMContentLoaded", () => {
   DOM.exportDataBtn.addEventListener("click", () => {
     const filtered = getFilteredRecords();
     const rows = [
-      ["Record ID", "Stage", "Customer Name", "Chassis No", "Model", "Fuel Type", "Location", "Sales Advisor", "Team Lead", "Date"]
+      ["Record ID", "Stage", "Customer Name", "Chassis No", "Model", "Fuel Type", "Location", "Month", "Date"]
     ];
     filtered.forEach(r => {
       rows.push([
@@ -1888,12 +2006,11 @@ document.addEventListener("DOMContentLoaded", () => {
         `"${r.model}"`,
         `"${r.fuelType}"`,
         `"${r.location}"`,
-        `"${r.salesAdvisor}"`,
-        `"${r.teamLead}"`,
+        `"${r.month}"`,
         `"${r.date}"`
       ]);
     });
-    downloadCsv("AUG26_Operations_Data.csv", rows);
+    downloadCsv(`AUG26_Operations_${state.filters.month}.csv`, rows);
   });
 
   DOM.exportLocationSummaryBtn.addEventListener("click", () => {
@@ -1906,7 +2023,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (r.fuelType === "EV") locMap[loc].ev++;
       else locMap[loc].pv++;
       const st = normalizeStage(r.stage);
-      if (st === "IBNR") locMap[loc].ibnr++;
+      if (st === "IBNR") {
+        const rtoSt = (r.rtoStatus || "").toUpperCase();
+        if (rtoSt.includes("NOT DONE") || !rtoSt.includes("DONE")) locMap[loc].ibnr++;
+      }
       else if (st === "E-PAYMENT") locMap[loc].epayment++;
       else if (st === "RTO") locMap[loc].rto++;
       else if (st === "INS /FORM20") locMap[loc].ins++;
@@ -1914,7 +2034,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     const rows = [
-      ["Location", "Delivered", "RTO Completed", "E-Payment", "INS / Form20", "IBNR", "PV Units", "EV Units", "EV Share %"]
+      ["Location", "Delivered", "RTO Completed", "E-Payment", "INS / Form20", "IBNR (All RTO Not Done)", "PV Units", "EV Units", "EV Share %"]
     ];
 
     Object.keys(locMap).forEach(loc => {
@@ -1933,17 +2053,18 @@ document.addEventListener("DOMContentLoaded", () => {
       ]);
     });
 
-    downloadCsv("AUG26_Location_Wise_Summary.csv", rows);
+    downloadCsv(`Location_Summary_${state.filters.month}.csv`, rows);
   });
 
   DOM.exportIbnrBtn.addEventListener("click", () => {
     const records = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === "IBNR");
     const rows = [
-      ["Date", "Order No", "Customer Name", "Model", "Fuel", "Chassis No", "Stock Status", "INS/Form20 Status", "E-Payment Status", "RTO Status", "CA Name", "Location", "SM Remarks", "RTO Plan Date"]
+      ["Date", "Month", "Order No", "Customer Name", "Model", "Fuel", "Chassis No", "Stock Status", "INS/Form20 Status", "E-Payment Status", "RTO Status", "CA Name", "Location", "SM Remarks", "RTO Plan Date"]
     ];
     records.forEach(r => {
       rows.push([
         `"${r.date}"`,
+        `"${r.month}"`,
         `"${r.bookingId}"`,
         `"${r.customerName}"`,
         `"${r.model}"`,
@@ -1959,18 +2080,19 @@ document.addEventListener("DOMContentLoaded", () => {
         `"${r.rtoPlanDate}"`
       ]);
     });
-    downloadCsv("AUG26_IBNR_Detailed_Register.csv", rows);
+    downloadCsv(`IBNR_Register_All_Pending.csv`, rows);
   });
 
   DOM.exportStageTableBtn.addEventListener("click", () => {
     const stage = state.currentStageDrilldown;
-    const records = window.AUG26_STORE.records.filter(r => normalizeStage(r.stage) === stage);
+    const records = getFilteredRecords().filter(r => normalizeStage(r.stage) === stage);
     const rows = [
-      ["Stage", "Customer Name", "Chassis No", "Model", "Fuel Type", "Location", "Sales Advisor", "Team Lead", "Date"]
+      ["Stage", "Month", "Customer Name", "Chassis No", "Model", "Fuel Type", "Location", "Sales Advisor", "Team Lead", "Date"]
     ];
     records.forEach(r => {
       rows.push([
         `"${r.stage}"`,
+        `"${r.month}"`,
         `"${r.customerName}"`,
         `"${r.chassisNo}"`,
         `"${r.model}"`,
@@ -1981,7 +2103,7 @@ document.addEventListener("DOMContentLoaded", () => {
         `"${r.date}"`
       ]);
     });
-    downloadCsv(`AUG26_${stage.replace(/[^a-zA-Z0-9]/g, '_')}_Data.csv`, rows);
+    downloadCsv(`${stage.replace(/[^a-zA-Z0-9]/g, '_')}_${state.filters.month}.csv`, rows);
   });
 
   // Initial Boot

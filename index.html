@@ -55,7 +55,7 @@
         <div class="nav-section-title">OPERATIONAL STAGES</div>
         <button class="nav-item stage-nav" data-tab="stage-ibnr" data-stage="IBNR">
           <span class="stage-dot ibnr"></span>
-          <span>IBNR (Invoiced/Stock)</span>
+          <span>IBNR (RTO Not Done)</span>
           <span class="nav-badge" id="badgeIBNR">0</span>
         </button>
         <button class="nav-item stage-nav" data-tab="stage-epayment" data-stage="E-PAYMENT">
@@ -110,6 +110,7 @@
             <h1 id="pageTitle">Operations & Delivery Dashboard</h1>
             <div class="live-sync-indicator">
               <span class="live-status-pill"><span class="dot-online"></span> Google Sheet Live</span>
+              <span class="month-indicator-pill" id="topMonthBadge">Present Month: Aug'26</span>
               <span class="last-sync-time" id="topSyncTime">Synced just now</span>
             </div>
           </div>
@@ -144,6 +145,17 @@
 
       <!-- Global Filter Strip -->
       <div class="filter-strip">
+        <!-- Month Filter (Present Month Default) -->
+        <div class="filter-item highlight-filter">
+          <label><i class="fa-solid fa-calendar-days"></i> Month:</label>
+          <select id="filterMonth" class="form-select month-select">
+            <option value="Aug'26" selected>Aug'26 (Present Month)</option>
+            <option value="Jul'26">Jul'26 (Previous Month)</option>
+            <option value="Jun'26">Jun'26</option>
+            <option value="ALL">All Months</option>
+          </select>
+        </div>
+
         <div class="filter-item">
           <label><i class="fa-solid fa-location-dot"></i> Location:</label>
           <select id="filterLocation" class="form-select">
@@ -171,7 +183,7 @@
           <label><i class="fa-solid fa-layer-group"></i> Stage:</label>
           <select id="filterStage" class="form-select">
             <option value="ALL">All Stages</option>
-            <option value="IBNR">IBNR</option>
+            <option value="IBNR">IBNR (RTO Not Done)</option>
             <option value="E-PAYMENT">E-PAYMENT</option>
             <option value="RTO">RTO Completed</option>
             <option value="INS /FORM20">INS / FORM20</option>
@@ -183,24 +195,24 @@
           <i class="fa-solid fa-arrows-rotate"></i> Reset
         </button>
 
-        <div class="filter-summary" id="filterSummaryText">Showing all records</div>
+        <div class="filter-summary" id="filterSummaryText">Showing Present Month (Aug'26)</div>
       </div>
 
       <!-- 5 Core Operational Stages KPI Row -->
       <section class="kpi-grid-5">
         <!-- 1. IBNR -->
-        <div class="kpi-card stage-card-ibnr" onclick="window.navigateToStage('IBNR')" style="cursor: pointer;" title="Click to view detailed IBNR register">
+        <div class="kpi-card stage-card-ibnr" onclick="window.navigateToStage('IBNR')" style="cursor: pointer;" title="Click to view IBNR Register (RTO Not Done)">
           <div class="kpi-header-row">
             <span class="stage-tag ibnr">STAGE 1</span>
-            <span class="stage-sub-badge" id="kpiIBNRPhysical">0 Phys / 0 Tr</span>
+            <span class="stage-sub-badge pending-badge"><i class="fa-solid fa-clock"></i> RTO Not Done</span>
           </div>
-          <span class="kpi-label">IBNR (Invoiced / Stock)</span>
+          <span class="kpi-label">IBNR (Pending RTO)</span>
           <div class="kpi-value-row">
             <span class="kpi-value" id="kpiIBNR">0</span>
             <span class="kpi-subtext">Units</span>
           </div>
           <div class="kpi-meta">
-            <span>PV: <b id="kpiIBNRPV">0</b></span> &bull; <span>EV: <b id="kpiIBNREV">0</b></span>
+            <span>PV: <b id="kpiIBNRPV">0</b></span> &bull; <span>EV: <b id="kpiIBNREV">0</b></span> &bull; <span id="kpiIBNRPhysical">0 Phys</span>
           </div>
         </div>
 
@@ -378,7 +390,7 @@
           <div class="view-header-bar">
             <div class="header-left">
               <h2>Location-Wise Operations Performance Matrix</h2>
-              <p>Branch-by-branch matrix comparing Delivered, RTO Completed, E-Payment, INS/Form20, and IBNR</p>
+              <p>Branch-by-branch matrix comparing Delivered, RTO Completed, E-Payment, INS/Form20, and IBNR (RTO Not Done)</p>
             </div>
             <div class="header-right">
               <button class="btn btn-secondary btn-sm" id="exportLocationSummaryBtn">
@@ -435,7 +447,7 @@
                       <th data-sort="rto" class="text-right">RTO Completed <i class="fa-solid fa-sort"></i></th>
                       <th data-sort="epayment" class="text-right">E-Payment <i class="fa-solid fa-sort"></i></th>
                       <th data-sort="ins" class="text-right">INS/Form20</th>
-                      <th data-sort="ibnr" class="text-right">IBNR</th>
+                      <th data-sort="ibnr" class="text-right">IBNR (RTO Not Done)</th>
                       <th data-sort="pv" class="text-right">PV Units</th>
                       <th data-sort="ev" class="text-right">EV Units</th>
                       <th data-sort="evShare" class="text-right">EV Share <i class="fa-solid fa-sort"></i></th>
@@ -590,7 +602,7 @@
                 <span class="stage-badge-large ibnr">IBNR REGISTER</span>
                 <h2>Invoiced / Booked Not Registered Register</h2>
               </div>
-              <p>Complete status tracking for Physical/Transit stock, INS/Form20, E-Payment, and RTO filings</p>
+              <p>Active IBNR tracking for units where RTO is Not Done &bull; Filter Physical/Transit stock, INS/Form20 & E-Payment</p>
             </div>
             <div class="header-right">
               <button class="btn btn-secondary btn-sm" id="exportIbnrBtn">
@@ -625,20 +637,20 @@
             <!-- RTO Status -->
             <div class="card mini-kpi">
               <span class="mini-label"><i class="fa-solid fa-stamp"></i> RTO Status</span>
-              <h3 id="ibnrKpiRtoDone" class="text-success">0 Done</h3>
-              <p class="sub-label" id="ibnrKpiRtoPending">0 Pending</p>
+              <h3 id="ibnrKpiRtoPending" style="color: #f43f5e;">0 Pending</h3>
+              <p class="sub-label" id="ibnrKpiRtoDone">0 Done</p>
             </div>
           </div>
 
           <!-- IBNR Filter Chips -->
           <div class="ibnr-quick-chips">
             <span class="chips-label">Quick Status Filters:</span>
-            <button class="ibnr-chip active" data-ibnr-filter="ALL">All IBNR (<span id="chipAllCount">0</span>)</button>
+            <button class="ibnr-chip active" data-ibnr-filter="RTO_NOT_DONE"><i class="fa-solid fa-clock"></i> Active IBNR (RTO Not Done: <span id="chipRtoPendCount">0</span>)</button>
+            <button class="ibnr-chip" data-ibnr-filter="ALL">All IBNR Entries (<span id="chipAllCount">0</span>)</button>
             <button class="ibnr-chip" data-ibnr-filter="PHYSICAL"><i class="fa-solid fa-warehouse"></i> Physical Stock (<span id="chipPhysCount">0</span>)</button>
             <button class="ibnr-chip" data-ibnr-filter="TRANSIT"><i class="fa-solid fa-truck"></i> In Transit (<span id="chipTransCount">0</span>)</button>
             <button class="ibnr-chip" data-ibnr-filter="FORM20_PENDING"><i class="fa-solid fa-clock"></i> Form20 Pending (<span id="chipForm20PendCount">0</span>)</button>
             <button class="ibnr-chip" data-ibnr-filter="EPAY_PENDING"><i class="fa-solid fa-clock"></i> E-Pay Pending (<span id="chipEpayPendCount">0</span>)</button>
-            <button class="ibnr-chip" data-ibnr-filter="RTO_PENDING"><i class="fa-solid fa-clock"></i> RTO Pending (<span id="chipRtoPendCount">0</span>)</button>
           </div>
 
           <!-- IBNR Detailed Table -->
@@ -783,7 +795,7 @@
           <div class="view-header-bar">
             <div class="header-left">
               <h2>Live Google Sheets Integration & Online Deployment Guide</h2>
-              <p>Keep your dashboard live for your GM & host on GitHub Pages or Render.com with automatic real-time updates</p>
+              <p>Keep your dashboard live for your GM at <strong>https://ibnr.onrender.com/</strong> with automatic real-time sync</p>
             </div>
           </div>
 
@@ -829,40 +841,39 @@
                   <div class="alert-icon"><i class="fa-solid fa-circle-check"></i></div>
                   <div class="alert-text">
                     <strong>Auto-Sync Enabled:</strong>
-                    <p>The dashboard automatically checks and pulls live rows from your Google Sheet every 60 seconds. Any new delivery, RTO clearance, or IBNR update appears live immediately!</p>
+                    <p>The dashboard automatically checks and pulls live rows from your Google Sheet every 60 seconds. Any new delivery, RTO clearance, or IBNR update appears live immediately on Render!</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- GitHub & Render Hosting Step-by-Step Guide -->
+            <!-- Connected Render Link Card -->
             <div class="card">
               <div class="card-header">
                 <div class="card-title-group">
-                  <h3><i class="fa-brands fa-github"></i> Host Online for Your GM</h3>
-                  <p>Step-by-step instructions for GitHub Pages or Render.com</p>
+                  <h3><i class="fa-solid fa-globe"></i> Live Render Dashboard</h3>
+                  <p>Direct shareable link for your General Manager</p>
                 </div>
-                <span class="badge-tag" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa;">Free & Instant</span>
+                <span class="badge-tag live-badge-tag"><i class="fa-solid fa-signal"></i> Online</span>
               </div>
               <div class="card-body">
                 <div class="guide-step-box">
-                  <h4><i class="fa-brands fa-github" style="color: #60a5fa;"></i> Option A: GitHub Pages (Recommended - 2 Mins)</h4>
-                  <ol class="guide-list">
-                    <li>Create a new repository on <a href="https://github.com" target="_blank" style="color: #60a5fa;">GitHub.com</a> (e.g. <code>aug26-ibnr-dashboard</code>).</li>
-                    <li>Upload the 4 files from <code>D:\DAILY_REPORTS\IBNR</code> (<code>index.html</code>, <code>styles.css</code>, <code>app.js</code>, <code>data.js</code>).</li>
-                    <li>Go to repo <strong>Settings</strong> &rarr; <strong>Pages</strong> &rarr; Set Branch to <strong>main</strong> / root &rarr; Click <strong>Save</strong>.</li>
-                    <li>GitHub gives you a live public link (e.g. <code>https://yourname.github.io/aug26-ibnr-dashboard/</code>) to share with your GM. <strong>It automatically updates live from your Google Sheet on every visit!</strong></li>
-                  </ol>
+                  <h4><i class="fa-solid fa-link" style="color: #38bdf8;"></i> Your Live Dashboard URL:</h4>
+                  <div style="margin: 0.75rem 0;">
+                    <a href="https://ibnr.onrender.com/" target="_blank" class="live-url-link">
+                      https://ibnr.onrender.com/ <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                    </a>
+                  </div>
+                  <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;">
+                    Share this URL with your GM. When any changes are made in the Google Sheet, the dashboard automatically syncs on load and every 60 seconds!
+                  </p>
                 </div>
 
                 <div class="guide-step-box" style="margin-top: 1rem;">
-                  <h4><i class="fa-solid fa-cloud" style="color: #34d399;"></i> Option B: Render.com (Static Site)</h4>
-                  <ol class="guide-list">
-                    <li>Log in to <a href="https://render.com" target="_blank" style="color: #34d399;">Render.com</a> &rarr; Click <strong>New +</strong> &rarr; <strong>Static Site</strong>.</li>
-                    <li>Connect your GitHub repository.</li>
-                    <li>Set Build Command to empty and Publish Directory to <code>.</code> &rarr; Click <strong>Create Static Site</strong>.</li>
-                    <li>Render gives you a custom URL (e.g. <code>https://aug26-dashboard.onrender.com</code>) accessible from mobile or PC!</li>
-                  </ol>
+                  <h4><i class="fa-brands fa-github" style="color: #60a5fa;"></i> Updating Your Render Deployment:</h4>
+                  <p style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.6;">
+                    Simply push the updated files from <code>D:\DAILY_REPORTS\IBNR</code> (<code>index.html</code>, <code>styles.css</code>, <code>app.js</code>, <code>data.js</code>) to your GitHub repository. Render will automatically redeploy the new version in seconds!
+                  </p>
                 </div>
               </div>
             </div>
