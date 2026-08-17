@@ -1766,23 +1766,31 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const sheetId = "1XjhjiG6mIPXmOOykL4iq4TaSjpr2IPDgZjvPNscNmrg";
-    const tabs = ["IBNR", "E-PAYMENT", "RTO", "INS /FORM20", "DELIVERED"];
+    const tabConfigs = [
+      { name: "IBNR", url: `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=1280599711`, fallbackUrl: `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=IBNR` },
+      { name: "E-PAYMENT", url: `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=E-PAYMENT` },
+      { name: "RTO", url: `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=RTO` },
+      { name: "INS /FORM20", url: `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent("INS /FORM20")}` },
+      { name: "DELIVERED", url: `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=DELIVERED` }
+    ];
     let fetchedTotal = 0;
     const allRecords = [];
 
-    for (const tab of tabs) {
+    for (const tabConf of tabConfigs) {
       try {
-        const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
-        const res = await fetch(url);
+        let res = await fetch(tabConf.url);
+        if (!res.ok && tabConf.fallbackUrl) {
+          res = await fetch(tabConf.fallbackUrl);
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const csvText = await res.text();
-        const records = parseSpecificTabCsv(csvText, tab);
+        const records = parseSpecificTabCsv(csvText, tabConf.name);
         if (records.length > 0) {
           allRecords.push(...records);
           fetchedTotal += records.length;
         }
       } catch (err) {
-        console.warn(`Tab ${tab} live poll:`, err);
+        console.warn(`Tab ${tabConf.name} live poll:`, err);
       }
     }
 
